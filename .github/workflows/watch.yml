@@ -33,13 +33,25 @@ jobs:
           CONSULATES: ${{ vars.CONSULATES }}
           TYPES: ${{ vars.TYPES }}
           LATEST_DATE: ${{ vars.LATEST_DATE }}
+          VISASLOTS: ${{ vars.VISASLOTS }}
 
       - name: Save state
         run: |
-          if ! git diff --quiet -- state.json; then
-            git config user.name "slot-watcher"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add state.json
-            git commit -m "Update seen slots"
-            git push
+          if git diff --quiet -- state.json; then
+            echo "Nothing new to save."
+            exit 0
           fi
+          git config user.name "slot-watcher"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          git commit -m "Update seen slots"
+          for attempt in 1 2 3; do
+            # Pick up anything committed since this run started (e.g. a file you uploaded).
+            # If state.json changed both places, keep this run's copy: it's the newest.
+            git pull --rebase -X theirs origin main && git push && exit 0
+            echo "Save attempt $attempt failed, retrying..."
+            git rebase --abort 2>/dev/null || true
+            sleep 5
+          done
+          echo "Could not save state after 3 tries."
+          exit 1
